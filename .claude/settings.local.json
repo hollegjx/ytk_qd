@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run openai:*)",
+      "Bash(curl:*)",
+      "Bash(dir /s /b E:JSProjectsqd_tukusrc*.ts 2)",
+      "Bash(nul)",
+      "Bash(findstr:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
