@@ -32,6 +32,13 @@ const router = createRouter({
       path: '/picture/add',
       name: 'add-picture',
       component: () => import('../pages/AddPicturePage.vue'),
+      meta: { requiresLogin: true },
+    },
+    {
+      path: '/picture/mine',
+      name: 'my-pictures',
+      component: () => import('../pages/MyPicturePage.vue'),
+      meta: { requiresLogin: true },
     },
     {
       path: '/picture/:id',

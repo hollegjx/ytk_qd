@@ -53,9 +53,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { PlusOutlined, LoadingOutlined } from '@ant-design/icons-vue'
-import { message } from 'ant-design-vue'
+import { message, Upload } from 'ant-design-vue'
 import type { UploadFile } from 'ant-design-vue'
 import { uploadPictureByUrlUsingPost, uploadPictureUsingPost } from '@/service/api/pictureController'
+import { PICTURE_UPLOAD_TIMEOUT_MS, validatePictureFile } from '@/utils/pictureUpload'
 
 // 接收父组件传递的 props
 const props = defineProps<{
@@ -91,20 +92,26 @@ watch(
 )
 
 // 阻止默认上传行为
-const handleBeforeUpload = () => {
+const handleBeforeUpload = (file: File) => {
+  const validationMessage = validatePictureFile(file)
+  if (validationMessage) {
+    message.error(validationMessage)
+    return Upload.LIST_IGNORE
+  }
   return true
 }
 
 // 自定义上传逻辑
 const handleUpload = async ({ file }: { file: File }) => {
+  if (loading.value || urlUploading.value) return
   loading.value = true
   try {
     // 构造参数，如果有 picture.id 则传入（用于编辑）
     const params = props.picture ? { id: props.picture.id } : {}
-    const res = await uploadPictureUsingPost(params, {}, file)
+    const res = await uploadPictureUsingPost(params, {}, file, { timeout: PICTURE_UPLOAD_TIMEOUT_MS })
 
     if (res.code === 0 && res.data) {
-      message.success('图片上传成功')
+      message.success('图片已上传为草稿，请完善信息后提交')
       console.log('上传成功，返回数据：', res.data)
       // 更新文件状态为成功，并设置 URL
       fileList.value = [
@@ -127,11 +134,13 @@ const handleUpload = async ({ file }: { file: File }) => {
     message.error('图片上传失败，' + (error as Error).message)
     // 上传失败，清空文件列表
     fileList.value = []
+  } finally {
+    loading.value = false
   }
-  loading.value = false
 }
 
 const handleUrlUpload = async (value: string) => {
+  if (urlUploading.value || loading.value) return
   const fileUrl = value.trim()
   if (!fileUrl) {
     message.warning('请输入图片 URL')
@@ -140,13 +149,16 @@ const handleUrlUpload = async (value: string) => {
 
   urlUploading.value = true
   try {
-    const res = await uploadPictureByUrlUsingPost({
-      fileUrl,
-      id: props.picture?.id,
-    })
+    const res = await uploadPictureByUrlUsingPost(
+      {
+        fileUrl,
+        id: props.picture?.id,
+      },
+      { timeout: PICTURE_UPLOAD_TIMEOUT_MS },
+    )
 
     if (res.code === 0 && res.data) {
-      message.success('图片导入成功')
+      message.success('图片已导入为草稿，请完善信息后提交')
       fileList.value = [
         {
           uid: '-1',

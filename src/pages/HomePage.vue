@@ -68,7 +68,7 @@
           <router-link :to="`/picture/${picture.id}`">
             <a-card hoverable>
               <template #cover>
-                <img :alt="picture.name" :src="picture.url" class="picture-cover" />
+                <PictureThumbnail :picture="picture" />
               </template>
               <a-card-meta :title="picture.name">
                 <template #description>
@@ -105,6 +105,7 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive } from "vue";
 import { message } from "ant-design-vue";
+import PictureThumbnail from "@/components/PictureThumbnail.vue";
 import {
   listPictureVoByPageUsingPost,
   listPictureTagCategoryUsingGet,
@@ -225,11 +226,6 @@ const onPageChange = (page: number, pageSize: number) => {
     .filter-tag {
       cursor: pointer;
     }
-  }
-
-  .picture-cover {
-    height: 180px;
-    object-fit: cover;
   }
 
   .pagination-wrapper {

@@ -21,6 +21,12 @@ router.beforeEach(async (to, from, next) => {
 
   const toUrl = to.fullPath
 
+  if (to.meta.requiresLogin && !loginUser.id) {
+    message.warning('请先登录')
+    next(`/user/login?redirect=${to.fullPath}`)
+    return
+  }
+
   // 管理员才能访问 /admin 开头的页面（1 = 管理员）
   if (toUrl.startsWith('/admin')) {
     if (!loginUser.id || loginUser.userRole !== 1) {

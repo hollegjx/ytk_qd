@@ -118,6 +118,9 @@ onMounted(() => {
 // 图片上传成功回调
 const onSuccess = (newPicture: API.PictureVO) => {
   picture.value = newPicture
+  if (newPicture.id && Number(route.query.id) !== newPicture.id) {
+    router.replace({ path: route.path, query: { ...route.query, id: newPicture.id } })
+  }
   // 自动填充已有信息
   if (newPicture.name) pictureForm.value.name = newPicture.name
   if (newPicture.introduction) pictureForm.value.introduction = newPicture.introduction
@@ -127,6 +130,7 @@ const onSuccess = (newPicture: API.PictureVO) => {
 
 // 提交表单
 const handleSubmit = async () => {
+  if (submitting.value) return
   if (!picture.value?.id) {
     message.error('请先上传图片')
     return
@@ -143,7 +147,7 @@ const handleSubmit = async () => {
     })
 
     if (res.code === 0) {
-      message.success('创建成功')
+      message.success('图片信息已提交')
       router.push('/')
     } else {
       message.error('创建失败：' + res.message)

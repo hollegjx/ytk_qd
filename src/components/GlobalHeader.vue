@@ -46,7 +46,7 @@
 <script lang="ts" setup>
 import { h, ref, computed, type VNode } from 'vue';
 import { useRouter } from 'vue-router';
-import { HomeOutlined, InfoCircleOutlined, PlusOutlined, PictureOutlined } from '@ant-design/icons-vue';
+import { HomeOutlined, InfoCircleOutlined, PlusOutlined, PictureOutlined, UserOutlined } from '@ant-design/icons-vue';
 import { message } from 'ant-design-vue';
 import type { MenuProps } from 'ant-design-vue';
 import { useLoginUserStore } from '@/stores/useLoginUserStore';
@@ -81,6 +81,14 @@ const allMenuItems: MenuItem[] = [
     icon: () => h(PlusOutlined),
     label: '创建图片',
     title: '创建图片',
+    access: 0,
+  },
+  {
+    key: '/picture/mine',
+    icon: () => h(UserOutlined),
+    label: '我的图片',
+    title: '我的图片',
+    access: 0,
   },
   {
     key: '/admin/userManage',
@@ -163,7 +171,7 @@ const handleLogout = async () => {
 // 路由跳转后，同步菜单高亮状态
 router.afterEach((to) => {
   // 只有当路径在菜单中时才更新
-  const menuKeys = ['/', '/picture/add', '/admin/userManage', '/admin/pictureManage'];
+  const menuKeys = ['/', '/picture/add', '/picture/mine', '/admin/userManage', '/admin/pictureManage'];
   if (menuKeys.includes(to.path)) {
     current.value = [to.path];
   }

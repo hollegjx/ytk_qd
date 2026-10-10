@@ -49,7 +49,7 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'url'">
-          <a-image :src="record.url" :width="80" />
+          <PictureThumbnail :picture="record" width="80px" :height="60" preview />
         </template>
         <template v-else-if="column.key === 'tags'">
           <a-tag v-for="tag in record.tags" :key="tag" color="blue">{{ tag }}</a-tag>
@@ -95,77 +95,42 @@
       </template>
     </a-table>
 
-    <a-modal
+    <PictureBatchUploadModal
       v-model:open="batchUploadModalOpen"
-      title="批量导入图片"
-      ok-text="开始导入"
-      cancel-text="取消"
-      :confirm-loading="batchUploading"
-      @ok="doBatchUpload"
-      @cancel="resetBatchUploadForm"
-    >
-      <a-form layout="vertical" :model="batchUploadForm">
-        <a-form-item label="搜索关键词" required>
-          <a-input
-            v-model:value="batchUploadForm.searchText"
-            placeholder="请输入搜索关键词"
-            allow-clear
-            :maxlength="50"
-          />
-        </a-form-item>
-        <a-form-item label="导入数量" required>
-          <a-input-number
-            v-model:value="batchUploadForm.count"
-            :min="1"
-            :max="30"
-            :precision="0"
-            style="width: 100%"
-          />
-        </a-form-item>
-        <a-form-item label="偏移量">
-          <a-input-number
-            v-model:value="batchUploadForm.offset"
-            :min="0"
-            :precision="0"
-            style="width: 100%"
-          />
-        </a-form-item>
-        <a-form-item label="分类">
-          <a-auto-complete
-            v-model:value="batchUploadForm.category"
-            :options="categoryOptions"
-            placeholder="请输入或选择分类"
-            allow-clear
-            style="width: 100%"
-          />
-        </a-form-item>
-        <a-form-item label="标签">
-          <a-select
-            v-model:value="batchUploadForm.tags"
-            mode="tags"
-            placeholder="请选择或输入标签"
-            :options="tagOptions"
-            allow-clear
-          />
-        </a-form-item>
-      </a-form>
-    </a-modal>
+      :category-options="categoryOptions"
+      :tag-options="tagOptions"
+      @success="handleBatchUploadSuccess"
+    />
+    <PictureReviewModal
+      v-model:open="reviewModalOpen"
+      :picture="reviewTarget"
+      :review-status="targetReviewStatus"
+      :confirm-loading="reviewSubmitting"
+      @submit="submitReview"
+    />
   </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, onMounted, reactive, computed } from 'vue';
 import { message, Modal } from 'ant-design-vue';
+import PictureThumbnail from '@/components/PictureThumbnail.vue';
 import type { TablePaginationConfig } from 'ant-design-vue';
 import {
   listPictureReviewByPageUsingPost,
   deletePictureUsingPost,
   listPictureTagCategoryUsingGet,
   reviewPictureUsingPost,
-  uploadPictureByBatchUsingPost,
 } from '@/service/api/pictureController';
 import { useRouter } from 'vue-router';
 import dayjs from 'dayjs';
+import {
+  PICTURE_REVIEW_STATUS as REVIEW_STATUS,
+  PICTURE_REVIEW_STATUS_OPTIONS,
+  PICTURE_REVIEW_STATUS_TEXT,
+} from '@/constants/picture';
+import PictureBatchUploadModal from '@/components/admin/PictureBatchUploadModal.vue';
+import PictureReviewModal from '@/components/admin/PictureReviewModal.vue';
 
 const router = useRouter();
 
@@ -183,26 +148,11 @@ const formatSize = (size: number) => {
   return (size / 1024 / 1024).toFixed(1) + ' MB';
 };
 
-const REVIEW_STATUS = {
-  REVIEWING: 0,
-  PASS: 1,
-  REJECT: 2,
-} as const;
-
-const REVIEW_STATUS_TEXT_MAP: Record<number, string> = {
-  [REVIEW_STATUS.REVIEWING]: '待审核',
-  [REVIEW_STATUS.PASS]: '通过',
-  [REVIEW_STATUS.REJECT]: '拒绝',
-};
-
-const reviewStatusOptions = Object.entries(REVIEW_STATUS_TEXT_MAP).map(([value, label]) => ({
-  value: Number(value),
-  label,
-}));
+const reviewStatusOptions = PICTURE_REVIEW_STATUS_OPTIONS;
 
 const getReviewStatusText = (status?: number) => {
   if (status === undefined || status === null) return '-';
-  return REVIEW_STATUS_TEXT_MAP[status] || '未知状态';
+  return PICTURE_REVIEW_STATUS_TEXT[status] || '未知状态';
 };
 
 const columns = [
@@ -282,14 +232,10 @@ const total = ref(0);
 const categoryOptions = ref<{ value: string }[]>([]);
 const tagOptions = ref<{ value: string }[]>([]);
 const batchUploadModalOpen = ref(false);
-const batchUploading = ref(false);
-const batchUploadForm = reactive<API.PictureUploadByBatchRequest>({
-  searchText: '',
-  count: 10,
-  offset: 0,
-  category: undefined,
-  tags: [],
-});
+const reviewModalOpen = ref(false);
+const reviewSubmitting = ref(false);
+const reviewTarget = ref<API.PictureVO>();
+const targetReviewStatus = ref<number>(REVIEW_STATUS.PASS);
 
 // 搜索条件
 const searchParams = reactive<API.PictureQueryRequest>({
@@ -358,36 +304,39 @@ const doEdit = (record: API.PictureVO) => {
   });
 };
 
-// 审核
+// 打开审核弹窗
 const doReview = (record: API.PictureVO, reviewStatus: number) => {
   if (!record.id) {
     message.error('图片 ID 不能为空');
     return;
   }
-  const reviewStatusText = getReviewStatusText(reviewStatus);
-  Modal.confirm({
-    title: `确认${reviewStatusText}`,
-    content: `确定要将图片「${record.name || record.id}」审核为${reviewStatusText}吗？`,
-    okText: '确定',
-    cancelText: '取消',
-    okType: reviewStatus === REVIEW_STATUS.REJECT ? 'danger' : 'primary',
-    async onOk() {
-      try {
-        const res = await reviewPictureUsingPost({
-          id: record.id,
-          reviewStatus,
-        });
-        if (res.code === 0) {
-          message.success('审核成功');
-          fetchPictureList();
-        } else {
-          message.error('审核失败：' + res.message);
-        }
-      } catch {
-        message.error('审核失败');
-      }
-    },
-  });
+  reviewTarget.value = record;
+  targetReviewStatus.value = reviewStatus;
+  reviewModalOpen.value = true;
+};
+
+const submitReview = async (reviewMessage: string) => {
+  if (reviewSubmitting.value || !reviewTarget.value?.id) return;
+  reviewSubmitting.value = true;
+  try {
+    const res = await reviewPictureUsingPost({
+      id: reviewTarget.value.id,
+      reviewStatus: targetReviewStatus.value,
+      reviewMessage: reviewMessage || undefined,
+    });
+    if (res.code === 0) {
+      message.success('审核成功');
+      reviewModalOpen.value = false;
+      reviewTarget.value = undefined;
+      fetchPictureList();
+    } else {
+      message.error('审核失败：' + res.message);
+    }
+  } catch {
+    message.error('审核失败');
+  } finally {
+    reviewSubmitting.value = false;
+  }
 };
 
 const canReviewAs = (record: API.PictureVO, reviewStatus: number) => {
@@ -398,58 +347,10 @@ const openBatchUploadModal = () => {
   batchUploadModalOpen.value = true;
 };
 
-const resetBatchUploadForm = () => {
-  batchUploadForm.searchText = '';
-  batchUploadForm.count = 10;
-  batchUploadForm.offset = 0;
-  batchUploadForm.category = undefined;
-  batchUploadForm.tags = [];
-};
-
-// 批量导入
-const doBatchUpload = async () => {
-  const searchText = batchUploadForm.searchText?.trim();
-  const count = batchUploadForm.count ?? 10;
-  const offset = batchUploadForm.offset ?? 0;
-  const category = batchUploadForm.category?.trim();
-  const tags = batchUploadForm.tags?.map((tag) => tag.trim()).filter(Boolean);
-  if (!searchText) {
-    message.warning('请输入搜索关键词');
-    return;
-  }
-  if (count < 1 || count > 30) {
-    message.warning('导入数量必须在 1 到 30 之间');
-    return;
-  }
-  if (offset < 0) {
-    message.warning('偏移量不能小于 0');
-    return;
-  }
-  batchUploading.value = true;
-  try {
-    const res = await uploadPictureByBatchUsingPost({
-      searchText,
-      count,
-      offset,
-      category: category || undefined,
-      tags: tags?.length ? tags : undefined,
-    });
-    if (res.code === 0) {
-      const successCount = res.data ?? 0;
-      message.success(`成功导入 ${successCount} 张图片`);
-      batchUploadModalOpen.value = false;
-      resetBatchUploadForm();
-      searchParams.current = 1;
-      searchParams.reviewStatus = REVIEW_STATUS.PASS;
-      fetchPictureList();
-    } else {
-      message.error('批量导入失败：' + res.message);
-    }
-  } catch {
-    message.error('批量导入失败');
-  } finally {
-    batchUploading.value = false;
-  }
+const handleBatchUploadSuccess = () => {
+  searchParams.current = 1;
+  searchParams.reviewStatus = REVIEW_STATUS.PASS;
+  fetchPictureList();
 };
 
 // 删除
